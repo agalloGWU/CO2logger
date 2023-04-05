@@ -6,16 +6,16 @@
 
 # TODO: modify prometheus code to support both push and pull, selectable by command line flag
 #       added arg parse support....need to modify imports and add code for push mode
+#       need to get sensor hostname (maybe via sys?) to form push url
 
 from argparse import ArgumentParser
 from datetime import datetime
 from time import sleep, strftime
 from sys import exit
-import serial
-from meteocalc import heat_index
-import board
 from adafruit_bme280 import basic as adafruit_bme280
-
+import board
+from meteocalc import heat_index
+import serial
 
 parser = ArgumentParser(description="Read and log dat from K30 & BME280 sensors")
 
@@ -35,27 +35,34 @@ write_to_file = args.write_to_file
 promreq = args.prom
 
 # try to import Prometheus
-if promreq:
+if promreq == 'pull':
     try:
         from prometheus_client import Gauge, start_http_server
-        prom_present = True
+        # if prometheus pull (aka scape mode, default behavior) is requested AND the client is installed,
+        # configured it:
+        # start the listener for prometheus metrics on port 9320
+        # will be available at http://addr:9320/metrics
+        start_http_server(9320)
+        # define prometheus metrics
+        # prepend var name with 'p' to differentiate it from original variables in the code
+        pCO2 = Gauge('CO2_ppm', 'Carbon Dioxide in parts per million')
+        pTemp = Gauge('Temp_C', 'Temperature in C')
+        pPres = Gauge('pressure_mbar', 'Barometric pressure in millibars')
+        pHumidity = Gauge('humidity_perc', 'Humidity, percent')
+        pHeat_index = Gauge('heat_index', 'Heat index in F')
     except ImportError:
         prom_present = False
         print("Prometheus client not found....not enabling feature")
 
 
-if prom_present and promreq:
-    # if prometheus is requested AND it's present, configured it:
-    # start the listener for prometheus metrics on port 9320
-    # will be available at http://addr:9320/metrics
-    start_http_server(9320)
-    # define prometheus metrics
-    # prepend var name with 'p' to differentiate it from original variables in the code
-    pCO2 = Gauge('CO2_ppm', 'Carbon Dioxide in parts per million')
-    pTemp = Gauge('Temp_C', 'Temperature in C')
-    pPres = Gauge('pressure_mbar', 'Barometric pressure in millibars')
-    pHumidity = Gauge('humidity_perc', 'Humidity, percent')
-    pHeat_index = Gauge('heat_index', 'Heat index in F')
+# vvvvvvvvvvvvvvvvvvvvvv need to modify for push gateway support
+if promreq == 'push':
+    try:
+        from prometheus_client import Gauge, push_to_gateway
+        prom_present = True
+    except ImportError:
+        prom_present = False
+        print("Prometheus client not found....not enabling feature")
 
 
 # do some hardware stuff.  it's easier if this is global
@@ -96,6 +103,8 @@ def readCO2():
     if len(result) != 7:
         # we probably need to handle this better
         # eg: if we don't get valid data, make a note, but don't die
+        # maybe remove ser.close()?
+        # maybe remember last value, or a dummy value so we know data is stale?
         print('Result is not 7 bytes: {}'.format(result))
         ser.close()
     co2 = result[3]*255 + result[4]
