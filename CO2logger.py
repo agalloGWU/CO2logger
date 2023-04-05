@@ -4,6 +4,9 @@
 # Based on AKLogger.py
 # for Alaska 2016.  BAsed on Li_Logger from April
 
+# TODO: modify prometheus code to support both push and pull, selectable by command line flag
+#       added arg parse support....need to modify imports and add code for push mode
+
 from argparse import ArgumentParser
 from datetime import datetime
 from time import sleep, strftime
@@ -20,13 +23,16 @@ parser.add_argument("-c", "--console", dest='console', action='store_false',
                     help="Do NOT print data to console while running (default=echo to console)")
 parser.add_argument("-f", "--file", dest='write_to_file', action='store_false',
                     help="Do NOT save data to file (default=write to file)")
-parser.add_argument("-p", "--prom", dest='promreq', action='store_false',
-                    help="Do NOT expose data via Prometheus endpoint (default=use prom; requires prometheus_client)")
+parser.add_argument('-p', '--prom',
+                    default='disable',
+                    choices=['push', 'pull', 'disable'],
+                    help='Sets the mode of data export using Prometheus (default: %(default)s)')
+
 args = parser.parse_args()
 
 console = args.console
 write_to_file = args.write_to_file
-promreq = args.promreq
+promreq = args.prom
 
 # try to import Prometheus
 if promreq:
