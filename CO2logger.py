@@ -4,9 +4,8 @@
 # Based on AKLogger.py
 # for Alaska 2016.  BAsed on Li_Logger from April
 
-# TODO: modify prometheus code to support both push and pull, selectable by command line flag
-#       added arg parse support....need to modify imports and add code for push mode
-#       need to get sensor hostname (maybe via sys?) to form push url
+# TODO: read host name to use as job name (or maybe a config file with this info?
+
 
 from argparse import ArgumentParser
 from datetime import datetime
@@ -17,7 +16,7 @@ import board
 from meteocalc import heat_index
 import serial
 
-parser = ArgumentParser(description="Read and log dat from K30 & BME280 sensors")
+parser = ArgumentParser(description="Read and log data from K30 & BME280 sensors")
 
 parser.add_argument("-c", "--console", dest='console', action='store_false',
                     help="Do NOT print data to console while running (default=echo to console)")
@@ -32,11 +31,12 @@ args = parser.parse_args()
 
 console = args.console
 write_to_file = args.write_to_file
-promreq = args.prom
+prom_mode = args.prom
+
 
 # try to import Prometheus
 prom_present = False
-if promreq == 'pull':
+if prom_mode == 'pull':
     try:
         # this is the default more for prometheus- for the server to scrape (or pull) data from the node
         # via http
@@ -57,11 +57,18 @@ if promreq == 'pull':
         prom_present = False
         print("Prometheus client not found....not enabling feature")
 
-
-# vvvvvvvvvvvvvvvvvvvvvv need to modify for push gateway support
-if promreq == 'push':
+if prom_mode == 'push':
     try:
-        from prometheus_client import Gauge, push_to_gateway
+        from prometheus_client import CollectorRegistry, Gauge, push_to_gateway
+        registry = CollectorRegistry()
+        pCO2 = Gauge('CO2_ppm', 'Carbon Dioxide in parts per million', registry=registry)
+        pTemp = Gauge('Temp_C', 'Temperature in C', registry=registry)
+        pPres = Gauge('pressure_mbar', 'Barometric pressure in millibars', registry=registry)
+        pHumidity = Gauge('humidity_perc', 'Humidity, percent', registry=registry)
+        pHeat_index = Gauge('heat_index', 'Heat index in F', registry=registry)
+        prometheus_host = '128.164.12.3'
+        prometheus_port = 9091
+        prometheus_job = 'sensor99'
         prom_present = True
     except ImportError:
         prom_present = False
@@ -75,7 +82,7 @@ if promreq == 'push':
 try:
     ser = serial.Serial("/dev/ttyAMA0", 9600, timeout=1)
 except Exception as e:
-    exit("Unable to open serial port.\n{}".format(e))
+    exit("Unable to open serial port.\nMaybe you should be root?\n{}".format(e))
 # Create sensor object, using the board's default I2C bus.
 i2c = board.I2C()  # uses board.SCL and board.SDA
 bme280 = adafruit_bme280.Adafruit_BME280_I2C(i2c)
@@ -155,11 +162,16 @@ def loopForever():
             print("\n")
         if prom_present:
             # update prometheus metrics
+            # if we're operating in pull mode, we don't need to do anything- this metrics will be exposed
+            # by the HTTP server
             pCO2.set(CO2)
             pTemp.set(Temp)
             pPres.set(Pres)
             pHumidity.set(Humidity)
             pHeat_index.set(HeatIndex)
+            # if we're operating in push mode, we need to do more work
+            if prom_mode == 'push':
+                push_to_gateway(f"{prometheus_host}:{prometheus_port}", job="sensor99", registry=registry)
         if write_to_file:
             filename = './data/' + now + '.txt'
             with open(filename, 'a') as f:
