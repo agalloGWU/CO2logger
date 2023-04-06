@@ -5,6 +5,8 @@
 # for Alaska 2016.  BAsed on Li_Logger from April
 
 # TODO: read host name to use as job name (or maybe a config file with this info?
+# TODO: consider switching from Prometheus to InFlux (because Prometheus isn't a long term data store
+#       nor does it have a good database-like interface)
 
 
 from argparse import ArgumentParser
@@ -162,7 +164,7 @@ def loopForever():
             print("\n")
         if prom_present:
             # update prometheus metrics
-            # if we're operating in pull mode, we don't need to do anything- this metrics will be exposed
+            # if we're operating in pull mode, we don't need to do anything- these metrics will be exposed
             # by the HTTP server
             pCO2.set(CO2)
             pTemp.set(Temp)
