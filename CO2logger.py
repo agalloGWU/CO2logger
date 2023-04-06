@@ -35,6 +35,7 @@ write_to_file = args.write_to_file
 promreq = args.prom
 
 # try to import Prometheus
+prom_present = False
 if promreq == 'pull':
     try:
         # this is the default more for prometheus- for the server to scrape (or pull) data from the node
@@ -44,6 +45,7 @@ if promreq == 'pull':
         # will be available at http://addr:9320/metrics
         from prometheus_client import Gauge, start_http_server
         start_http_server(9320)
+        prom_present = True
         # define prometheus metrics
         # prepend var name with 'p' to differentiate it from original variables in the code
         pCO2 = Gauge('CO2_ppm', 'Carbon Dioxide in parts per million')
