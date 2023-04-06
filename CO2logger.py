@@ -37,11 +37,12 @@ promreq = args.prom
 # try to import Prometheus
 if promreq == 'pull':
     try:
-        from prometheus_client import Gauge, start_http_server
-        # if prometheus pull (aka scape mode, default behavior) is requested AND the client is installed,
+        # this is the default more for prometheus- for the server to scrape (or pull) data from the node
+        # via http
         # configured it:
         # start the listener for prometheus metrics on port 9320
         # will be available at http://addr:9320/metrics
+        from prometheus_client import Gauge, start_http_server
         start_http_server(9320)
         # define prometheus metrics
         # prepend var name with 'p' to differentiate it from original variables in the code
