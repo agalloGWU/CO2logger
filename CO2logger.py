@@ -7,6 +7,13 @@
 # TODO: read host name to use as job name (or maybe a config file with this info?
 # TODO: consider switching from Prometheus to InFlux (because Prometheus isn't a long term data store
 #       nor does it have a good database-like interface)
+# TODO: error handling for promethus push mode when push fails (ie, can't reach the push gateway)
+#       currently, the script bails.  this is bad
+# TODO: better error handling when we don't get data from the K30.
+#       maybe using an obviously bogus or impossible vlue (greater than the max read value of the K30?) and/or
+#       write to error file?
+# TODO: create a symlink to current data file (so we can always `tail -f current` in the data directory without
+#       having to look for the most recent file)
 
 
 from argparse import ArgumentParser
@@ -40,7 +47,7 @@ prom_mode = args.prom
 prom_present = False
 if prom_mode == 'pull':
     try:
-        # this is the default more for prometheus- for the server to scrape (or pull) data from the node
+        # this is the default more for prometheus- for the prometheus server to scrape (or pull) data from the node
         # via http
         # configured it:
         # start the listener for prometheus metrics on port 9320
@@ -57,7 +64,7 @@ if prom_mode == 'pull':
         pHeat_index = Gauge('heat_index', 'Heat index in F')
     except ImportError:
         prom_present = False
-        print("Prometheus client not found....not enabling feature")
+        print("Prometheus client not found....not enabling feature...will continue without Prometheus")
 
 if prom_mode == 'push':
     try:
@@ -74,7 +81,7 @@ if prom_mode == 'push':
         prom_present = True
     except ImportError:
         prom_present = False
-        print("Prometheus client not found....not enabling feature")
+        print("Prometheus client not found....not enabling feature...will continue without Prometheus")
 
 
 # do some hardware stuff.  it's easier if this is global
@@ -117,8 +124,9 @@ def readCO2():
         # eg: if we don't get valid data, make a note, but don't die
         # maybe remove ser.close()?
         # maybe remember last value, or a dummy value so we know data is stale?
-        print('Result is not 7 bytes: {}'.format(result))
-        ser.close()
+        print('Result is not 7 bytes: {}.  Setting value to 9666'.format(result))
+        co2 = 9666
+        # ser.close()
     co2 = result[3]*255 + result[4]
     return co2
 
