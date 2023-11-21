@@ -10,13 +10,10 @@
 # ***** why?
 # TODO: consider switching from Prometheus to InFlux (because Prometheus isn't a long term data store
 #       nor does it have a good database-like interface)
-# TODO: error handling for promethus push mode when push fails (ie, can't reach the push gateway)
-#       currently, the script bails.  this is bad
 # TODO: better error handling when we don't get data from the K30.
 #       maybe using an obviously bogus or impossible vlue (greater than the max read value of the K30?) and/or
 #       write to error file?
-# TODO: create a symlink to current data file (so we can always `tail -f current` in the data directory without
-#       having to look for the most recent file)
+#       testing ^^^^ in progress.  right now `try/except Exception` seems broad, but working
 
 
 from argparse import ArgumentParser
@@ -153,15 +150,18 @@ def read_BME280():
 
 
 def loopForever():
+    datadir = './data/'
+    timestamp = dtstamp()
     minutes_to_average = 0.5
     if write_to_file:       # if we're going to write data to a file, create the file and symlink
         now = strftime("%Y-%m-%d-%H:%M")
-        filename = './data/' + now + '.txt'
+        filename = now + '.txt'
+        symlinkname = 'current'
         try:
-            symlink(filename, 'current')
+            symlink(filename, datadir + symlinkname)
         except FileExistsError:     # if the symlink already exists, we need to remove the old one first
-            remove('current')
-            symlink(filename, 'current')
+            remove(datadir + symlinkname)
+            symlink(filename, datadir + symlinkname)
     while True:
         sumCO2 = 0
         sumTemp = 0
@@ -183,7 +183,6 @@ def loopForever():
         HeatIndex = float((heat_index(TempF, Humidity)))
         if console:
             # echo to console
-            timestamp = dtstamp()
             print(timestamp)
             print("CO2: {:.2f}".format(CO2))
             print("Temp: {:.2f}".format(TempF))
@@ -204,15 +203,16 @@ def loopForever():
             if prom_mode == 'push':
                 try:
                     push_to_gateway(f"{prometheus_host}:{prometheus_port}", job=job, registry=registry)
-                except urllib.error.URLError:
-                    with open('prometheus-push-failed-data.txt', 'a') as promerrfile:
+                except Exception as error:
+                    with open(datadir + 'prometheus-push-failed-data.txt', 'a') as promerrfile:
                         promerrfile.write(timestamp)
+                        promerrfile.write(str(error))
                         stringtowrite = "CO2: {:.2f}, Temp: {:.2f}, Pres: {:.2f}, Humid: {:.2f}\n".format(CO2, TempF,
                                                                                                           Pres,
                                                                                                           Humidity)
                         promerrfile.write(stringtowrite)
         if write_to_file:
-            with open(filename, 'a') as f:
+            with open(datadir + filename, 'a') as f:
                 f.write(timestamp)
                 # stringtowrite = "%.1f %.2f %.1f %.1f \n" % (CO2, Temp, Pres, Humidity)
                 stringtowrite = "CO2: {:.2f}, Temp: {:.2f}, Pres: {:.2f}, Humid: {:.2f}\n".format(CO2, TempF, Pres,
