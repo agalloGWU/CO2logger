@@ -151,11 +151,10 @@ def read_BME280():
 
 def loopForever():
     datadir = './data/'
-    timestamp = dtstamp()
     minutes_to_average = 0.5
     if write_to_file:       # if we're going to write data to a file, create the file and symlink
-        now = strftime("%Y-%m-%d-%H:%M")
-        filename = now + '.txt'
+        time4filename = strftime("%Y-%m-%d-%H:%M")
+        filename = time4filename + '.txt'
         symlinkname = 'current'
         try:
             symlink(filename, datadir + symlinkname)
@@ -163,6 +162,7 @@ def loopForever():
             remove(datadir + symlinkname)
             symlink(filename, datadir + symlinkname)
     while True:
+        timestamp = dtstamp()
         sumCO2 = 0
         sumTemp = 0
         sumPres = 0
