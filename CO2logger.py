@@ -4,7 +4,10 @@
 # Based on AKLogger.py
 # for Alaska 2016.  BAsed on Li_Logger from April
 
-# TODO: read host name to use as job name (or maybe a config file with this info?
+# TODO: read host name to use as job name (or maybe a config file with this info?)
+#       using CLI argument '-j' for now (default reads hostname)
+# ***** in push mode, we're setting this variable twice (once in try to import Prometheus and again when we write data
+# ***** why?
 # TODO: consider switching from Prometheus to InFlux (because Prometheus isn't a long term data store
 #       nor does it have a good database-like interface)
 # TODO: error handling for promethus push mode when push fails (ie, can't reach the push gateway)
@@ -23,7 +26,12 @@ from sys import exit
 from adafruit_bme280 import basic as adafruit_bme280
 import board
 from meteocalc import heat_index
+from os import uname, remove, symlink
 import serial
+
+
+# get nodename for Prometheus Job name (unless it is overriden by command line option '-j'
+mynodename = uname()[1]
 
 parser = ArgumentParser(description="Read and log data from K30 & BME280 sensors")
 
@@ -35,12 +43,16 @@ parser.add_argument('-p', '--prom',
                     default='disable',
                     choices=['push', 'pull', 'disable'],
                     help='Sets the mode of data export using Prometheus (default: %(default)s)')
+parser.add_argument('-j', '--job',
+                    default=mynodename,
+                    help='Job name to use for Prometheus (default: %(default)s)')
 
 args = parser.parse_args()
 
 console = args.console
 write_to_file = args.write_to_file
 prom_mode = args.prom
+job = args.job
 
 
 # try to import Prometheus
@@ -77,7 +89,7 @@ if prom_mode == 'push':
         pHeat_index = Gauge('heat_index', 'Heat index in F', registry=registry)
         prometheus_host = '128.164.12.3'
         prometheus_port = 9091
-        prometheus_job = 'sensor99'
+        prometheus_job = job
         prom_present = True
     except ImportError:
         prom_present = False
@@ -125,9 +137,11 @@ def readCO2():
         # maybe remove ser.close()?
         # maybe remember last value, or a dummy value so we know data is stale?
         print('Result is not 7 bytes: {}.  Setting value to 9666'.format(result))
-        co2 = 9666
+        co2 = 19666
+        return co2
         # ser.close()
-    co2 = result[3]*255 + result[4]
+    else:
+        co2 = result[3]*255 + result[4]
     return co2
 
 
@@ -140,7 +154,14 @@ def read_BME280():
 
 def loopForever():
     minutes_to_average = 0.5
-    now = strftime("%Y-%m-%d-%H:%M")
+    if write_to_file:       # if we're going to write data to a file, create the file and symlink
+        now = strftime("%Y-%m-%d-%H:%M")
+        filename = './data/' + now + '.txt'
+        try:
+            symlink(filename, 'current')
+        except FileExistsError:     # if the symlink already exists, we need to remove the old one first
+            remove('current')
+            symlink(filename, 'current')
     while True:
         sumCO2 = 0
         sumTemp = 0
@@ -181,9 +202,16 @@ def loopForever():
             pHeat_index.set(HeatIndex)
             # if we're operating in push mode, we need to do more work
             if prom_mode == 'push':
-                push_to_gateway(f"{prometheus_host}:{prometheus_port}", job="sensor99", registry=registry)
+                try:
+                    push_to_gateway(f"{prometheus_host}:{prometheus_port}", job=job, registry=registry)
+                except urllib.error.URLError:
+                    with open('prometheus-push-failed-data.txt', 'a') as promerrfile:
+                        promerrfile.write(timestamp)
+                        stringtowrite = "CO2: {:.2f}, Temp: {:.2f}, Pres: {:.2f}, Humid: {:.2f}\n".format(CO2, TempF,
+                                                                                                          Pres,
+                                                                                                          Humidity)
+                        promerrfile.write(stringtowrite)
         if write_to_file:
-            filename = './data/' + now + '.txt'
             with open(filename, 'a') as f:
                 f.write(timestamp)
                 # stringtowrite = "%.1f %.2f %.1f %.1f \n" % (CO2, Temp, Pres, Humidity)
