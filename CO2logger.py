@@ -200,6 +200,8 @@ def loopForever():
             pHumidity.set(Humidity)
             pHeat_index.set(HeatIndex)
             # if we're operating in push mode, we need to do more work
+            # we also need to catch exceptions in case the push fails (eg- no network, unable to reach the gateway)
+            # in that case, we write data to a special file and include what the exception was
             if prom_mode == 'push':
                 try:
                     push_to_gateway(f"{prometheus_host}:{prometheus_port}", job=job, registry=registry)
@@ -207,14 +209,13 @@ def loopForever():
                     with open(datadir + 'prometheus-push-failed-data.txt', 'a') as promerrfile:
                         promerrfile.write(timestamp)
                         promerrfile.write(str(error))
-                        stringtowrite = "CO2: {:.2f}, Temp: {:.2f}, Pres: {:.2f}, Humid: {:.2f}\n".format(CO2, TempF,
+                        stringtowrite = ",CO2: {:.2f}, Temp: {:.2f}, Pres: {:.2f}, Humid: {:.2f}\n".format(CO2, TempF,
                                                                                                           Pres,
                                                                                                           Humidity)
                         promerrfile.write(stringtowrite)
         if write_to_file:
             with open(datadir + filename, 'a') as f:
                 f.write(timestamp)
-                # stringtowrite = "%.1f %.2f %.1f %.1f \n" % (CO2, Temp, Pres, Humidity)
                 stringtowrite = "CO2: {:.2f}, Temp: {:.2f}, Pres: {:.2f}, Humid: {:.2f}\n".format(CO2, TempF, Pres,
                                                                                                 Humidity)
                 f.write(stringtowrite)
